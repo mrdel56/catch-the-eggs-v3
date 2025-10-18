@@ -1,6 +1,6 @@
 // catch_the_eggs.cpp
 // Menu -> Game playable "Catch the Eggs" prototype
-// MODIFIED based on user requests (Airflow, New Perks/Damage, Help Menu)
+// MODIFIED based on user requests (Airflow, New Perks/Damage, Help Menu, Button Fix, Rules Button Moved, Only Rules Button Visible, Replaced Range-Based For Loops)
 // This version preserves the user's original code structure.
 //
 // Requirements: stb_image.h in same folder; menu_background.png and game_background.png accessible.
@@ -30,7 +30,7 @@
   #include <direct.h>
   #define GetCurrentDir _getcwd
   #include <Windows.h> // For PlaySound
-  #include <mmsystem.h> // <--- FIX 1: Added this header for sound functions
+  #include <mmsystem.h> // Added this header for sound functions
   #pragma comment(lib, "winmm.lib") // Link winmm.lib
 #else
   #include <unistd.h>
@@ -57,32 +57,32 @@ GLuint texMenu = 0;
 GLuint texGame = 0;
 
 // Scenes
-enum Scene { SCENE_MENU, SCENE_GAME, SCENE_HELP }; // <-- NEW: Added Help Scene
+enum Scene { SCENE_MENU, SCENE_GAME, SCENE_HELP };
 Scene currentScene = SCENE_MENU;
 
 // Menu click zones (tuned to your background)
 struct ClickZone { float x1,y1,x2,y2; const char* name; };
-ClickZone startZone = {770.0f, 440.0f, 970.0f, 520.0f, "Start"};
-ClickZone helpZone  = {770.0f, 340.0f, 970.0f, 420.0f, "Help"}; // <-- NEW: Help Button
-ClickZone quitZone  = {770.0f, 240.0f, 970.0f, 320.0f, "Quit"}; // <-- MODIFIED: Moved down
+ClickZone startZone = {770.0f, 460.0f, 970.0f, 540.0f, "Start"}; // Original coordinates (adjust if needed)
+ClickZone rulesZone = {WIN_W/2.0f - 100.0f, 60.0f, WIN_W/2.0f + 100.0f, 100.0f, "Rules"}; // <-- MODIFIED Coordinates for Footer
+ClickZone quitZone  = {770.0f, 280.0f, 970.0f, 360.0f, "Quit"};  // Original coordinates (adjust if needed)
 // In-game UI buttons
 ClickZone pauseZone = {WIN_W - 280.0f, WIN_H - 40.0f, WIN_W - 190.0f, WIN_H - 12.0f, "Pause"};
 ClickZone menuZone  = {WIN_W - 100.0f, WIN_H - 40.0f, WIN_W - 20.0f, WIN_H - 12.0f, "Menu"};
 // Help screen button
-ClickZone backZone  = {WIN_W/2.0f - 100.0f, 100.0f, WIN_W/2.0f + 100.0f, 150.0f, "Back"}; // <-- NEW: Back button
+ClickZone backZone  = {WIN_W/2.0f - 100.0f, 100.0f, WIN_W/2.0f + 100.0f, 150.0f, "Back"};
 
 // -----------------------------------------------------------------------------
 // Game data: eggs, perks, basket, chicken
-enum ItemType { ITEM_EGG_NORMAL, ITEM_EGG_BLUE, ITEM_EGG_GOLD, ITEM_POOP, ITEM_EGG_ROTTEN, ITEM_PERK, ITEM_PERK_MULTIPLIER }; // <-- NEW: Rotten Egg and Multiplier
-enum PerkType { PERK_NONE, PERK_BIG_BASKET, PERK_SLOW_FALL, PERK_EXTRA_TIME, PERK_SCORE_MULTIPLIER, PERK_SMALL_BASKET }; // <-- NEW: Multiplier and Small Basket
+enum ItemType { ITEM_EGG_NORMAL, ITEM_EGG_BLUE, ITEM_EGG_GOLD, ITEM_POOP, ITEM_EGG_ROTTEN, ITEM_PERK, ITEM_PERK_MULTIPLIER };
+enum PerkType { PERK_NONE, PERK_BIG_BASKET, PERK_SLOW_FALL, PERK_EXTRA_TIME, PERK_SCORE_MULTIPLIER, PERK_SMALL_BASKET };
 
 struct Item {
     ItemType type;
     float x, y;
-    float vx; // <-- NEW: Added horizontal velocity for wind
+    float vx; // for wind
     float vy;
     bool active;
-    PerkType perk; // only used if type == ITEM_PERK or similar
+    PerkType perk;
 };
 
 std::vector<Item> items;
@@ -90,48 +90,48 @@ std::vector<Item> items;
 // basket
 float basketX = WIN_W/2.0f;
 float basketY = 90.0f;
-float basketBaseHalfW = 60.0f; // half width
-float basketHalfW = basketBaseHalfW; // may change by perks
+float basketBaseHalfW = 60.0f;
+float basketHalfW = basketBaseHalfW;
 
 // chicken on wire
 struct Chicken {
     float x;
     float speed;
-    int dir; // 1 = right, -1 = left
-    float wireY; // Y position for this chicken's wire
+    int dir;
+    float wireY;
 };
 std::vector<Chicken> chickens;
 
 // Y positions for the wires/chickens
 const float CHICKEN_WIRE_Y_1 = WIN_H - 160.0f;
-const float CHICKEN_WIRE_Y_2 = WIN_H - 220.0f; // Second wire, lower
-const float CHICKEN_WIRE_Y_3 = WIN_H - 280.0f; // Third wire, even lower
+const float CHICKEN_WIRE_Y_2 = WIN_H - 220.0f;
+const float CHICKEN_WIRE_Y_3 = WIN_H - 280.0f;
 
 // game rules
 int scoreVal = 0;
-int scoreMultiplier = 1; // <-- NEW: Score multiplier
-int highScore = 0; // Added for high score
-int gameTime = 60; // seconds remaining
+int scoreMultiplier = 1;
+int highScore = 0;
+int gameTime = 60;
 bool gameRunning = false;
 bool gamePaused = false;
 
 // spawn timers
-float spawnAccumulator = 0.0f;      // seconds
-float spawnInterval = 1.2f;        // seconds (modified by slow perk)
+float spawnAccumulator = 0.0f;
+float spawnInterval = 1.2f;
 
 // fall speed
-float baseFallSpeed = 180.0f; // px/sec
+float baseFallSpeed = 180.0f;
 float fallSpeedMultiplier = 1.0f;
 
 // perk timers
 float perk_big_basket_timer = 0.0f;
-float perk_small_basket_timer = 0.0f; // <-- NEW: Small basket timer
+float perk_small_basket_timer = 0.0f;
 float perk_slow_fall_timer = 0.0f;
-float perk_multiplier_timer = 0.0f; // <-- NEW: Multiplier timer
+float perk_multiplier_timer = 0.0f;
 
-// --- NEW: Airflow/Wind ---
-float windSpeed = 0.0f;     // Current wind speed (positive=right, negative=left)
-float windTimer = 5.0f;     // Time until next wind change
+// --- Airflow/Wind ---
+float windSpeed = 0.0f;
+float windTimer = 5.0f;
 struct WindLine { float x, y; };
 std::vector<WindLine> windLines;
 
@@ -143,7 +143,6 @@ void loadHighScore() {
         file >> highScore;
         file.close();
     } else {
-        std::cout << "Could not read high score file. Defaulting to 0." << std::endl;
         highScore = 0;
     }
 }
@@ -155,8 +154,6 @@ void saveHighScore(int newScore) {
         if (file.is_open()) {
             file << highScore;
             file.close();
-        } else {
-            std::cerr << "Error: Could not save high score to file!" << std::endl;
         }
     }
 }
@@ -168,11 +165,7 @@ void playSound(const char* soundId) {
     std::string path = "sounds/";
     path += soundId;
     path += ".wav";
-    // Use SND_FILENAME and SND_ASYNC (defined in mmsystem.h)
     PlaySound(path.c_str(), NULL, SND_FILENAME | SND_ASYNC);
-#else
-    // Placeholder for other OS. You'd integrate an audio library like OpenAL/SDL_mixer here.
-    // printf("DEBUG: PlaySound(%s)\n", soundId);
 #endif
 }
 
@@ -191,35 +184,36 @@ GLuint loadTextureFromFile(const char* path) {
     glBindTexture(GL_TEXTURE_2D, tid);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-#ifdef GL_CLAMP_TO_EDGE
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-#else
+
+    // <-- FIX: Use GL_CLAMP directly -->
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-#endif
+    // <-- END FIX -->
+
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
     stbi_image_free(data);
     glBindTexture(GL_TEXTURE_2D, 0);
     return tid;
 }
 
+
 GLuint tryLoadTexture(const char* configuredPath, const char* fallbackName) {
     if (configuredPath && configuredPath[0] != '\0') {
         GLuint t = loadTextureFromFile(configuredPath);
         if (t) return t;
     }
-    char cwd[1024];
-    if (GetCurrentDir(cwd, sizeof(cwd))) printf("CWD: %s\n", cwd);
+    // Try current directory
     GLuint t = loadTextureFromFile(fallbackName);
-    if (t) return t;
-    // try parent
-    if (GetCurrentDir(cwd, sizeof(cwd))) {
+    if(t) return t;
+
+    // Try parent directory if CWD available
+    char cwd[1024];
+     if (GetCurrentDir(cwd, sizeof(cwd))) {
         char p[1100]; snprintf(p, sizeof(p), "%s/../%s", cwd, fallbackName);
         t = loadTextureFromFile(p);
         if (t) return t;
     }
-    return 0;
+    return 0; // Failed to load
 }
 
 // -----------------------------------------------------------------------------
@@ -251,7 +245,10 @@ void drawChickens() {
     GLUquadric* quad = gluNewQuadric();
     gluQuadricDrawStyle(quad, GLU_FILL);
 
-    for (const auto& ch : chickens) {
+    // <-- FIX: Use index-based loop -->
+    for (size_t i = 0; i < chickens.size(); ++i) {
+        const Chicken& ch = chickens[i]; // Get a reference to the current chicken
+    // <-- END FIX -->
         float x = ch.x;
         float y = ch.wireY; // Use individual chicken's wire Y
         int dir = ch.dir;   // 1 for right, -1 for left
@@ -448,7 +445,10 @@ void drawBasket() {
 
 // draw items (eggs/poop/perk)
 void drawItems() {
-    for (auto &it : items) {
+    // <-- FIX: Use index-based loop -->
+    for (size_t i = 0; i < items.size(); ++i) {
+        Item &it = items[i]; // Get a reference to the current item
+    // <-- END FIX -->
         if (!it.active) continue;
 
         float r = 0.0f, g = 0.0f, b = 0.0f;
@@ -458,9 +458,9 @@ void drawItems() {
           case ITEM_EGG_BLUE:   r=0.4f; g=0.7f; b=1.0f; break;
           case ITEM_EGG_GOLD:   r=1.0f; g=0.86f; b=0.2f; break;
           case ITEM_POOP:       r=0.4f; g=0.2f; b=0.05f; break;
-          case ITEM_EGG_ROTTEN: r=0.4f; g=0.5f; b=0.3f; break; // <-- NEW: Greenish
+          case ITEM_EGG_ROTTEN: r=0.4f; g=0.5f; b=0.3f; break; // Greenish
           case ITEM_PERK:       r=0.8f; g=0.4f; b=0.9f; break; // Pink for old perks
-          case ITEM_PERK_MULTIPLIER: r=0.9f; g=0.1f; b=0.9f; break; // <-- NEW: Purple for multiplier
+          case ITEM_PERK_MULTIPLIER: r=0.9f; g=0.1f; b=0.9f; break; // Purple for multiplier
         }
         glColor3f(r,g,b);
 
@@ -487,9 +487,9 @@ void drawItems() {
             float r1 = 16.0f; float r2 = 7.0f;
             glBegin(GL_TRIANGLE_FAN);
               glVertex2f(it.x, it.y);
-              for (int i=0; i<=10; i++) {
-                  float r_outer = (i%2 == 0) ? r1 : r2;
-                  float a = i * (2.0f * 3.1415926f / 10.0f) + (3.1415926f / 2.0f);
+              for (int k=0; k<=10; k++) { // Use different loop variable
+                  float r_outer = (k%2 == 0) ? r1 : r2;
+                  float a = k * (2.0f * 3.1415926f / 10.0f) + (3.1415926f / 2.0f);
                   glVertex2f(it.x + cosf(a)*r_outer, it.y + sinf(a)*r_outer);
               }
             glEnd();
@@ -499,12 +499,12 @@ void drawItems() {
             float rY = (it.type == ITEM_POOP) ? 8.0f : 12.0f;
             glBegin(GL_TRIANGLE_FAN);
               glVertex2f(it.x, it.y);
-              for (int i=0;i<=20;i++){
-                float a = i * 2.0f * 3.1415926f / 20.0f;
+              for (int k=0; k<=20; k++){ // Use different loop variable
+                float a = k * 2.0f * 3.1415926f / 20.0f;
                 glVertex2f(it.x + cosf(a)*rX, it.y + sinf(a)*rY);
               }
             glEnd();
-            // <-- NEW: Draw crack on rotten egg
+            // Draw crack on rotten egg
             if (it.type == ITEM_EGG_ROTTEN) {
                 glColor3f(0.1f, 0.2f, 0.1f); // Dark crack lines
                 glBegin(GL_LINE_STRIP);
@@ -545,17 +545,17 @@ void resetGame() {
     basketX = WIN_W/2.0f;
     basketHalfW = basketBaseHalfW;
     scoreVal = 0;
-    scoreMultiplier = 1; // <-- NEW: Reset multiplier
+    scoreMultiplier = 1; // Reset multiplier
     gameTime = 60;
     spawnAccumulator = 0.0f;
     baseFallSpeed = 180.0f;
     fallSpeedMultiplier = 1.0f;
     perk_big_basket_timer = 0.0f;
-    perk_small_basket_timer = 0.0f; // <-- NEW: Reset small basket timer
+    perk_small_basket_timer = 0.0f; // Reset small basket timer
     perk_slow_fall_timer = 0.0f;
-    perk_multiplier_timer = 0.0f; // <-- NEW: Reset multiplier timer
-    windSpeed = 0.0f; // <-- NEW: Reset wind
-    windTimer = 5.0f; // <-- NEW: Reset wind timer
+    perk_multiplier_timer = 0.0f; // Reset multiplier timer
+    windSpeed = 0.0f; // Reset wind
+    windTimer = 5.0f; // Reset wind timer
     gameRunning = true;
     gamePaused = false;
 }
@@ -579,9 +579,9 @@ void spawnItem() {
 
     float goldChance = 0.03f * chickenScale; // 3% base, scales up
     float blueChance = 0.08f * chickenScale; // 8% base, scales up
-    float multiplierChance = 0.04f * perkScale; // <-- NEW: Multiplier chance
+    float multiplierChance = 0.04f * perkScale; // Multiplier chance
     float perkChance = 0.05f * perkScale;    // 5% base, scales up
-    float rottenChance = 0.08f; // <-- NEW: Rotten egg chance
+    float rottenChance = 0.08f; // Rotten egg chance
     float poopChance = 0.15f;
 
     // --- Create Cumulative Windows (Correct, non-buggy logic) ---
@@ -595,7 +595,7 @@ void spawnItem() {
     else if (r < (cumulativeChance += blueChance)) {
         it.type = ITEM_EGG_BLUE;
     }
-    // <-- NEW: Window 3: Multiplier Perk -->
+    // Window 3: Multiplier Perk
     else if (r < (cumulativeChance += multiplierChance)) {
         it.type = ITEM_PERK_MULTIPLIER;
         it.perk = PERK_SCORE_MULTIPLIER;
@@ -608,7 +608,7 @@ void spawnItem() {
         if (p < 0.5f) it.perk = PERK_BIG_BASKET;
         else it.perk = PERK_SLOW_FALL;
     }
-    // <-- NEW: Window 5: Rotten Egg -->
+    // Window 5: Rotten Egg
     else if (r < (cumulativeChance += rottenChance)) {
         it.type = ITEM_EGG_ROTTEN;
     }
@@ -624,7 +624,7 @@ void spawnItem() {
     // --- Set item properties ---
     it.x = spawnX + ( (rand()%41) - 20 ); // small horizontal jitter
     it.y = spawnY - 18.0f;
-    it.vx = 0.0f; // <-- NEW: Start with no horizontal speed
+    it.vx = 0.0f; // Start with no horizontal speed
     it.vy = baseFallSpeed;
     it.active = true;
     items.push_back(it);
@@ -641,13 +641,13 @@ void applyPerk(Item &it) {
         fallSpeedMultiplier = 0.55f;
         perk_slow_fall_timer = 8.0f;
     }
-    // <-- NEW: Multiplier Perk -->
+    // Multiplier Perk
     else if (it.perk == PERK_SCORE_MULTIPLIER) {
         playSound("perk");
         scoreMultiplier = 2;
         perk_multiplier_timer = 10.0f; // 10 seconds of 2x score
     }
-    // <-- NEW: Small Basket (from rotten egg) -->
+    // Small Basket (from rotten egg)
     else if (it.perk == PERK_SMALL_BASKET) {
         playSound("poop"); // Negative sound
         basketHalfW = basketBaseHalfW * 0.6f; // Shrink basket
@@ -662,18 +662,18 @@ void handleCatch(Item &it) {
     else if (it.type == ITEM_EGG_BLUE) { points = 5; playSound("collect_gem"); }
     else if (it.type == ITEM_EGG_GOLD) { points = 10; playSound("collect_gem"); }
     else if (it.type == ITEM_POOP) { points = -10; playSound("poop"); }
-    // <-- NEW: Handle Rotten Egg -->
+    // Handle Rotten Egg
     else if (it.type == ITEM_EGG_ROTTEN) {
         points = -5;
         it.perk = PERK_SMALL_BASKET; // Apply the small basket perk
         applyPerk(it);
     }
-    // <-- MODIFIED: Handle both perk types -->
+    // Handle both perk types
     else if (it.type == ITEM_PERK || it.type == ITEM_PERK_MULTIPLIER) {
         applyPerk(it);
     }
 
-    // <-- MODIFIED: Apply multiplier to points -->
+    // Apply multiplier to points
     scoreVal += (points * scoreMultiplier);
     // Ensure score doesn't go negative
     scoreVal = std::max(0, scoreVal);
@@ -684,7 +684,7 @@ void handleCatch(Item &it) {
 void updateGame(float dt) {
     if (!gameRunning || gamePaused) return;
 
-    // --- NEW: Wind Logic ---
+    // --- Wind Logic ---
     windTimer -= dt;
     if (windTimer <= 0.0f) {
         float r = (float)rand() / RAND_MAX;
@@ -694,7 +694,10 @@ void updateGame(float dt) {
         windTimer = 3.0f + (rand() % 4); // Next change in 3-6 seconds
     }
     // Animate wind lines
-    for(auto& line : windLines) {
+    // <-- FIX: Use index-based loop -->
+    for(size_t i = 0; i < windLines.size(); ++i) {
+        WindLine& line = windLines[i];
+    // <-- END FIX -->
         line.x += windSpeed * dt * 0.5f; // Move lines at half wind speed
         if (line.x > WIN_W + 20) line.x = -20;
         if (line.x < -20) line.x = WIN_W + 20;
@@ -718,7 +721,10 @@ void updateGame(float dt) {
 
 
     // chicken movement (loop over all chickens)
-    for (auto& ch : chickens) {
+    // <-- FIX: Use index-based loop -->
+    for (size_t i = 0; i < chickens.size(); ++i) {
+        Chicken& ch = chickens[i];
+    // <-- END FIX -->
         ch.x += ch.dir * ch.speed * dt;
         if (ch.x > WIN_W - 160) { ch.x = WIN_W - 160; ch.dir = -1; }
         if (ch.x < 160)        { ch.x = 160;        ch.dir =  1; }
@@ -737,9 +743,12 @@ void updateGame(float dt) {
     }
 
     // move items
-    for (auto &it : items) {
+    // <-- FIX: Use index-based loop -->
+    for (size_t i = 0; i < items.size(); ++i) {
+        Item &it = items[i];
+    // <-- END FIX -->
         if (!it.active) continue;
-        it.x += windSpeed * dt; // <-- NEW: Apply wind
+        it.x += windSpeed * dt; // Apply wind
         it.y -= it.vy * fallSpeedMultiplier * dt;
         // hit basket?
         if (it.y <= basketY + 30 && it.y >= basketY - 30) {
@@ -760,7 +769,11 @@ void updateGame(float dt) {
     if (items.size() > 200) {
         std::vector<Item> tmp;
         tmp.reserve(items.size());
-        for (auto &it : items) if (it.active) tmp.push_back(it);
+        // <-- FIX: Use index-based loop -->
+        for (size_t i = 0; i < items.size(); ++i) {
+            if (items[i].active) tmp.push_back(items[i]);
+        }
+        // <-- END FIX -->
         items.swap(tmp);
     }
 
@@ -769,7 +782,7 @@ void updateGame(float dt) {
         perk_big_basket_timer -= dt;
         if (perk_big_basket_timer <= 0.0f) { basketHalfW = basketBaseHalfW; perk_big_basket_timer = 0.0f; }
     }
-    // <-- NEW: Small basket timer -->
+    // Small basket timer
     if (perk_small_basket_timer > 0.0f) {
         perk_small_basket_timer -= dt;
         if (perk_small_basket_timer <= 0.0f) { basketHalfW = basketBaseHalfW; perk_small_basket_timer = 0.0f; }
@@ -778,7 +791,7 @@ void updateGame(float dt) {
         perk_slow_fall_timer -= dt;
         if (perk_slow_fall_timer <= 0.0f) { fallSpeedMultiplier = 1.0f; perk_slow_fall_timer = 0.0f; }
     }
-    // <-- NEW: Multiplier timer -->
+    // Multiplier timer
     if (perk_multiplier_timer > 0.0f) {
         perk_multiplier_timer -= dt;
         if (perk_multiplier_timer <= 0.0f) { scoreMultiplier = 1; perk_multiplier_timer = 0.0f; }
@@ -823,7 +836,7 @@ void timer_cb(int) {
 // Input: keyboard + mouse
 void keyboard_cb(unsigned char key, int x, int y) {
     (void)x; (void)y;
-    // <-- MODIFIED: Check for help scene -->
+    // Check for help scene
     if (currentScene == SCENE_MENU || currentScene == SCENE_HELP) {
         if (key == 27) {
             if (currentScene == SCENE_HELP) currentScene = SCENE_MENU;
@@ -876,16 +889,18 @@ void mouseClick_cb(int button, int state, int mx, int my) {
             currentScene = SCENE_GAME;
             return;
         }
-        // <-- NEW: Check for help button -->
-        if (fx >= helpZone.x1 && fx <= helpZone.x2 && fy >= helpZone.y1 && fy <= helpZone.y2) {
+        // Check for rulesZone
+        if (fx >= rulesZone.x1 && fx <= rulesZone.x2 && fy >= rulesZone.y1 && fy <= rulesZone.y2) {
             currentScene = SCENE_HELP;
             return;
         }
+        // Ensure Quit button check is separate and correct
         if (fx >= quitZone.x1 && fx <= quitZone.x2 && fy >= quitZone.y1 && fy <= quitZone.y2) {
-            exit(0);
+            exit(0); // This correctly exits the game
+            return; // Added return for consistency
         }
     }
-    // <-- NEW: Check for help scene clicks -->
+    // Check for help scene clicks
     else if (currentScene == SCENE_HELP) {
         if (fx >= backZone.x1 && fx <= backZone.x2 && fy >= backZone.y1 && fy <= backZone.y2) {
             currentScene = SCENE_MENU;
@@ -960,7 +975,7 @@ void renderHUD() {
         drawText(buf, px, WIN_H - 60, GLUT_BITMAP_HELVETICA_12, 0.8f, 0.1f, 0.8f);
         px += 140;
     }
-    // <-- NEW: Small basket timer -->
+    // Small basket timer
     if (perk_small_basket_timer > 0.0f) {
         sprintf(buf, "Small Basket: %.0fs", perk_small_basket_timer);
         drawText(buf, px+1, WIN_H - 59, GLUT_BITMAP_HELVETICA_12, 0,0,0);
@@ -973,7 +988,7 @@ void renderHUD() {
         drawText(buf, px, WIN_H - 60, GLUT_BITMAP_HELVETICA_12, 0.8f, 0.1f, 0.8f);
         px += 140;
     }
-    // <-- NEW: Multiplier timer -->
+    // Multiplier timer
     if (perk_multiplier_timer > 0.0f) {
         sprintf(buf, "2x SCORE: %.0fs", perk_multiplier_timer);
         drawText(buf, px+1, WIN_H - 59, GLUT_BITMAP_HELVETICA_12, 0,0,0);
@@ -981,14 +996,17 @@ void renderHUD() {
     }
 }
 
-// <-- NEW: Function to draw wind effects -->
+// Function to draw wind effects
 void drawWind() {
     if (windSpeed == 0.0f) return;
     glColor4f(1.0f, 1.0f, 1.0f, 0.3f);
     glEnable(GL_LINE_STIPPLE);
     glLineStipple(1, 0x00FF); // Dashed line pattern
     glLineWidth(2.0f);
-    for (const auto& line : windLines) {
+    // <-- FIX: Use index-based loop -->
+    for (size_t i = 0; i < windLines.size(); ++i) {
+        const WindLine& line = windLines[i];
+    // <-- END FIX -->
         glBegin(GL_LINES);
           glVertex2f(line.x, line.y);
           glVertex2f(line.x + windSpeed * 0.2f, line.y); // Short lines indicating direction
@@ -1019,9 +1037,11 @@ void display() {
 
         // Calculate text width for centering
         int textWidth = 0;
+        // <-- FIX: Use index-based loop for string -->
         for (size_t i = 0; i < highScoreStr.length(); ++i) {
             textWidth += glutBitmapWidth(font, highScoreStr[i]);
         }
+        // <-- END FIX -->
         float textX = (WIN_W - textWidth) / 2.0f;
         float textY = WIN_H / 2.0f + 100; // Adjust Y to be visually central
 
@@ -1029,6 +1049,12 @@ void display() {
         drawText(highScoreStr.c_str(), textX + 2, textY + 2, font, 0.1f, 0.1f, 0.1f);
         // Draw main text
         drawText(highScoreStr.c_str(), textX, textY, font, 1.0f, 1.0f, 0.0f); // Yellow for visibility
+
+        // --- Draw ONLY Rules Button ---
+        //drawButton(startZone, "Start"); // Commented out
+        drawButton(rulesZone, "Rules"); // Draw Rules button
+        //drawButton(quitZone, "Quit");   // Commented out
+        // --- END Button Change ---
 
         // --- Footer Text ---
         const char* footer = "Game developed by Delowar and Oboni";
@@ -1043,13 +1069,16 @@ void display() {
         if (texGame) drawFullScreenTexture(texGame);
         else { glColor3f(0.8f,0.95f,1.0f); glRectf(0,0,WIN_W,WIN_H); }
 
-        // <-- NEW: Draw Wind -->
+        // Draw Wind
         drawWind();
 
         // wires (draw for all chickens)
         glColor3f(0.2f,0.2f,0.2f);
         glLineWidth(3.0f);
-        for (const auto& ch : chickens) {
+        // <-- FIX: Use index-based loop -->
+        for (size_t i = 0; i < chickens.size(); ++i) {
+            const Chicken& ch = chickens[i];
+        // <-- END FIX -->
             glBegin(GL_LINES);
               glVertex2f(20.0f, ch.wireY+10.0f);
               glVertex2f(WIN_W-20.0f, ch.wireY+10.0f);
@@ -1072,9 +1101,11 @@ void display() {
             std::string finalScoreStr = ss.str();
 
             int finalScoreWidth = 0;
+            // <-- FIX: Use index-based loop for string -->
             for (size_t i = 0; i < finalScoreStr.length(); ++i) {
                 finalScoreWidth += glutBitmapWidth(GLUT_BITMAP_HELVETICA_18, finalScoreStr[i]);
             }
+            // <-- END FIX -->
             drawText(finalScoreStr.c_str(), (WIN_W - finalScoreWidth)/2.0f, WIN_H/2.0f + 20, GLUT_BITMAP_HELVETICA_18, 1,1,1);
 
             if (scoreVal >= highScore && scoreVal > 0) {
@@ -1103,7 +1134,7 @@ void display() {
             drawText(resumeMsg, (WIN_W - resumeMsgWidth)/2.0f, WIN_H/2.0f - 30, GLUT_BITMAP_HELVETICA_18, 1,1,1);
         }
     }
-    // <-- NEW: Help Screen Rendering -->
+    // Help Screen Rendering
     else if (currentScene == SCENE_HELP) {
         // Draw menu as background
         if (texMenu) drawFullScreenTexture(texMenu);
@@ -1150,7 +1181,7 @@ void initGL() {
     texGame = tryLoadTexture(GAME_BG_PATH, FALLBACK_GAME);
     if (!texGame) fprintf(stderr, "Game texture not loaded.\n");
 
-    // <-- NEW: Initialize wind lines -->
+    // Initialize wind lines
     for(int i=0; i<30; ++i) {
         windLines.push_back({(float)(rand()%WIN_W), (float)(100 + rand()%(WIN_H-200))});
     }
@@ -1163,7 +1194,7 @@ int main(int argc, char** argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
     glutInitWindowSize(WIN_W, WIN_H);
-    glutCreateWindow("Catch The Eggs - Playable"); // <-- Kept your original title
+    glutCreateWindow("Catch The Eggs - Playable"); // Kept your original title
     initGL();
 
     loadHighScore(); // Load high score at start
