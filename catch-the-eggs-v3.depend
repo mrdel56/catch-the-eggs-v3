@@ -1,4 +1,5 @@
 # depslib dependency file v1.0
+<<<<<<< HEAD
 1760784256 source:c:\users\mr_del\documents\catch-the-eggs-v3\main.cpp
 	<cstdio>
 	<cstdlib>
@@ -6,6 +7,12 @@
 	<vector>
 	<string>
 	<ctime>
+=======
+1760775739 source:c:\users\mr_del\documents\catch-the-eggs-v3\main.cpp
+	<cstdio>
+	<cstdlib>
+	<cstring>
+>>>>>>> bb171153cb90817d9ecb3f837a07a661cd2ffc50
 	<GL/glut.h>
 	"stb_image.h"
 	<direct.h>
