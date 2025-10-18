@@ -1,177 +1,217 @@
-/*
- * GLUT Shapes Demo
- *
- * Written by Nigel Stewart November 2003
- *
- * This program is test harness for the sphere, cone
- * and torus shapes in GLUT.
- *
- * Spinning wireframe and smooth shaded shapes are
- * displayed until the ESC or q key is pressed.  The
- * number of geometry stacks and slices can be adjusted
- * using the + and - keys.
- */
+// test_bg.cpp
+// Minimal test: load PNG via stb_image and draw fullscreen textured quad.
+//
+// - Put stb_image.h in the same folder.
+// - Put menu_background.png either next to the exe or set IMG_PATH to an absolute path.
+// Compile (example):
+//  g++ test_bg.cpp -o test_bg -lGL -lGLU -lglut    (Linux/MinGW)
 
-#ifdef __APPLE__
-#include <GLUT/glut.h>
-#else
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
 #include <GL/glut.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+// Cross-platform getcwd wrapper
+#ifdef _WIN32
+    #include <direct.h>   // for _getcwd
+    #define GetCurrentDir _getcwd
+#else
+    #include <unistd.h>   // for getcwd
+    #define GetCurrentDir getcwd
 #endif
 
-#include <stdlib.h>
+// Window size (logical)
+const int WIN_W = 1024;
+const int WIN_H = 768;
 
-static int slices = 16;
-static int stacks = 16;
+// If you prefer absolute path, set it here. Otherwise set to empty string ""
+// const char* IMG_PATH = "C:/Users/MR_DEL/Documents/catch-the-eggs-v3/menu_background.png";
+const char* IMG_PATH = ""; // leave empty to use local "menu_background.png"
 
-/* GLUT callback Handlers */
+const char* FALLBACK_NAME = "C:/Users/MR_DEL/Documents/catch-the-eggs-v3/menu_background.png";
 
-static void resize(int width, int height)
-{
-    const float ar = (float) width / (float) height;
+GLuint texID = 0;
 
-    glViewport(0, 0, width, height);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glFrustum(-ar, ar, -1.0, 1.0, 2.0, 100.0);
+// Try to load texture from 'path'. Returns 0 on failure.
+GLuint loadTextureFromFile(const char* path) {
+    int w = 0, h = 0, comp = 0;
+    // flip vertically so image matches OpenGL coordinate system
+    stbi_set_flip_vertically_on_load(true);
 
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity() ;
+    unsigned char* data = stbi_load(path, &w, &h, &comp, STBI_rgb_alpha);
+    if (!data) {
+        fprintf(stderr, "stbi_load failed for '%s' (reason: %s)\n", path, stbi_failure_reason());
+        return 0;
+    }
+
+    printf("Loaded image '%s' (%d x %d), components(original)=%d\n", path, w, h, comp);
+
+    GLuint tid = 0;
+    glGenTextures(1, &tid);
+    glBindTexture(GL_TEXTURE_2D, tid);
+
+    // Simple filtering
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // Clamp to edge to avoid wrap seams
+#ifdef GL_CLAMP_TO_EDGE
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+#else
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+#endif
+
+    // Upload RGBA data to GL
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+
+    stbi_image_free(data);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    printf("Texture uploaded to GPU, id=%u\n", (unsigned)tid);
+    return tid;
 }
 
-static void display(void)
-{
-    const double t = glutGet(GLUT_ELAPSED_TIME) / 1000.0;
-    const double a = t*90.0;
+// Try a couple of locations to find the image: IMG_PATH (if set) then fallback name in CWD.
+GLuint tryLoadTexture(const char* configuredPath) {
+    // 1) If configuredPath provided, try it first.
+    if (configuredPath && configuredPath[0] != '\0') {
+        printf("Attempting to load texture from configured path: '%s'\n", configuredPath);
+        GLuint t = loadTextureFromFile(configuredPath);
+        if (t != 0) return t;
+    }
 
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glColor3d(1,0,0);
+    // 2) Try the fallback name in current working directory
+    char cwd[1024] = {0};
+    if (GetCurrentDir(cwd, sizeof(cwd))) {
+        printf("Current working directory: %s\n", cwd);
+    } else {
+        printf("Could not get current working directory.\n");
+    }
 
-    glPushMatrix();
-        glTranslated(-2.4,1.2,-6);
-        glRotated(60,1,0,0);
-        glRotated(a,0,0,1);
-        glutSolidSphere(1,slices,stacks);
-    glPopMatrix();
+    printf("Attempting to load texture from working directory: '%s'\n", FALLBACK_NAME);
+    GLuint t = loadTextureFromFile(FALLBACK_NAME);
+    if (t != 0) return t;
 
-    glPushMatrix();
-        glTranslated(0,1.2,-6);
-        glRotated(60,1,0,0);
-        glRotated(a,0,0,1);
-        glutSolidCone(1,1,slices,stacks);
-    glPopMatrix();
+    // 3) As a final attempt, try "../" (project root) + fallback (useful if exe is in bin/Debug)
+    char parentPath[1100];
+    if (GetCurrentDir(cwd, sizeof(cwd))) {
+        snprintf(parentPath, sizeof(parentPath), "%s/%s", cwd, FALLBACK_NAME);
+        printf("Attempting to load texture from: %s\n", parentPath);
+        t = loadTextureFromFile(parentPath);
+        if (t != 0) return t;
 
-    glPushMatrix();
-        glTranslated(2.4,1.2,-6);
-        glRotated(60,1,0,0);
-        glRotated(a,0,0,1);
-        glutSolidTorus(0.2,0.8,slices,stacks);
-    glPopMatrix();
+        // try one level up
+        snprintf(parentPath, sizeof(parentPath), "%s/..%s", cwd, FALLBACK_NAME);
+        // but better to build proper path - try "../menu_background.png"
+        snprintf(parentPath, sizeof(parentPath), "%s/../%s", cwd, FALLBACK_NAME);
+        printf("Attempting to load texture from: %s\n", parentPath);
+        t = loadTextureFromFile(parentPath);
+        if (t != 0) return t;
+    }
 
-    glPushMatrix();
-        glTranslated(-2.4,-1.2,-6);
-        glRotated(60,1,0,0);
-        glRotated(a,0,0,1);
-        glutWireSphere(1,slices,stacks);
-    glPopMatrix();
+    // failed
+    return 0;
+}
 
-    glPushMatrix();
-        glTranslated(0,-1.2,-6);
-        glRotated(60,1,0,0);
-        glRotated(a,0,0,1);
-        glutWireCone(1,1,slices,stacks);
-    glPopMatrix();
+void initGL() {
+    glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    glPushMatrix();
-        glTranslated(2.4,-1.2,-6);
-        glRotated(60,1,0,0);
-        glRotated(a,0,0,1);
-        glutWireTorus(0.2,0.8,slices,stacks);
-    glPopMatrix();
+    // Setup orthographic projection matching window pixels
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluOrtho2D(0, WIN_W, 0, WIN_H);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
+    // Try load texture from configured path or fallback
+    texID = tryLoadTexture(IMG_PATH);
+    if (texID == 0) {
+        fprintf(stderr, "ERROR: failed to find or load '%s' or '%s' in working dir. Please copy image next to exe.\n",
+                (IMG_PATH && IMG_PATH[0] ? IMG_PATH : "(none)"), FALLBACK_NAME);
+    } else {
+        printf("Background texture ready (id=%u)\n", (unsigned)texID);
+    }
+}
+
+void drawFullScreenTexture(GLuint t) {
+    if (t == 0) return;
+
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, t);
+    glColor3f(1,1,1);
+
+    // With stbi_set_flip_vertically_on_load(true) above, use normal texcoords
+    glBegin(GL_QUADS);
+      glTexCoord2f(0.0f, 0.0f); glVertex2f(0.0f, 0.0f);
+      glTexCoord2f(1.0f, 0.0f); glVertex2f((float)WIN_W, 0.0f);
+      glTexCoord2f(1.0f, 1.0f); glVertex2f((float)WIN_W, (float)WIN_H);
+      glTexCoord2f(0.0f, 1.0f); glVertex2f(0.0f, (float)WIN_H);
+    glEnd();
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDisable(GL_TEXTURE_2D);
+}
+
+void display() {
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (texID != 0) {
+        drawFullScreenTexture(texID);
+    } else {
+        // fallback colored background so issue is obvious
+        glColor3f(1, 0.6f, 0.6f);
+        glBegin(GL_QUADS);
+          glVertex2f(0,0); glVertex2f(WIN_W,0); glVertex2f(WIN_W, WIN_H); glVertex2f(0, WIN_H);
+        glEnd();
+    }
+
+    // status text
+    glColor3f(0,0,0);
+    glRasterPos2f(10, 10);
+    const char* msg = (texID != 0) ? "Texture loaded - OK" : "Texture not loaded - check path/working dir";
+    for (const char* p = msg; *p; ++p) glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *p);
 
     glutSwapBuffers();
 }
 
+void reshape(int w, int h) {
+    // keep fixed logical resolution for simplicity
+    glutReshapeWindow(WIN_W, WIN_H);
+}
 
-static void key(unsigned char key, int x, int y)
-{
-    switch (key)
-    {
-        case 27 :
-        case 'q':
-            exit(0);
-            break;
+void keyboard(unsigned char k, int x, int y) {
+    (void)x; (void)y;
+    if (k == 27) exit(0);
+}
 
-        case '+':
-            slices++;
-            stacks++;
-            break;
+int main(int argc, char** argv) {
+    printf("Starting test_bg. Configured IMG_PATH: '%s'\n", (IMG_PATH && IMG_PATH[0]) ? IMG_PATH : "(none)");
 
-        case '-':
-            if (slices>3 && stacks>3)
-            {
-                slices--;
-                stacks--;
-            }
-            break;
+    // Print CWD for debugging
+    char cwd[1024];
+    if (GetCurrentDir(cwd, sizeof(cwd))) {
+        printf("Current working directory: %s\n", cwd);
+    } else {
+        printf("Could not get current working directory.\n");
     }
 
-    glutPostRedisplay();
-}
-
-static void idle(void)
-{
-    glutPostRedisplay();
-}
-
-const GLfloat light_ambient[]  = { 0.0f, 0.0f, 0.0f, 1.0f };
-const GLfloat light_diffuse[]  = { 1.0f, 1.0f, 1.0f, 1.0f };
-const GLfloat light_specular[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-const GLfloat light_position[] = { 2.0f, 5.0f, 5.0f, 0.0f };
-
-const GLfloat mat_ambient[]    = { 0.7f, 0.7f, 0.7f, 1.0f };
-const GLfloat mat_diffuse[]    = { 0.8f, 0.8f, 0.8f, 1.0f };
-const GLfloat mat_specular[]   = { 1.0f, 1.0f, 1.0f, 1.0f };
-const GLfloat high_shininess[] = { 100.0f };
-
-/* Program entry point */
-
-int main(int argc, char *argv[])
-{
     glutInit(&argc, argv);
-    glutInitWindowSize(640,480);
-    glutInitWindowPosition(10,10);
-    glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH);
-
-    glutCreateWindow("GLUT Shapes");
-
-    glutReshapeFunc(resize);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
+    glutInitWindowSize(WIN_W, WIN_H);
+    glutCreateWindow("test_bg - texture load test");
+    initGL();
     glutDisplayFunc(display);
-    glutKeyboardFunc(key);
-    glutIdleFunc(idle);
-
-    glClearColor(1,1,1,1);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-
-    glEnable(GL_LIGHT0);
-    glEnable(GL_NORMALIZE);
-    glEnable(GL_COLOR_MATERIAL);
-    glEnable(GL_LIGHTING);
-
-    glLightfv(GL_LIGHT0, GL_AMBIENT,  light_ambient);
-    glLightfv(GL_LIGHT0, GL_DIFFUSE,  light_diffuse);
-    glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular);
-    glLightfv(GL_LIGHT0, GL_POSITION, light_position);
-
-    glMaterialfv(GL_FRONT, GL_AMBIENT,   mat_ambient);
-    glMaterialfv(GL_FRONT, GL_DIFFUSE,   mat_diffuse);
-    glMaterialfv(GL_FRONT, GL_SPECULAR,  mat_specular);
-    glMaterialfv(GL_FRONT, GL_SHININESS, high_shininess);
-
+    glutReshapeFunc(reshape);
+    glutKeyboardFunc(keyboard);
     glutMainLoop();
-
-    return EXIT_SUCCESS;
+    return 0;
 }
