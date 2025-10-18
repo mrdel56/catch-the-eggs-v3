@@ -1,18 +1,28 @@
 # depslib dependency file v1.0
-<<<<<<< HEAD
-1760784256 source:c:\users\mr_del\documents\catch-the-eggs-v3\main.cpp
+16908980 <<<<<<< HEAD
+
+1760811843 source:c:\users\mr_del\documents\catch-the-eggs-v3\main.cpp
 	<cstdio>
 	<cstdlib>
 	<cmath>
 	<vector>
 	<string>
 	<ctime>
-=======
-1760775739 source:c:\users\mr_del\documents\catch-the-eggs-v3\main.cpp
-	<cstdio>
-	<cstdlib>
-	<cstring>
->>>>>>> bb171153cb90817d9ecb3f837a07a661cd2ffc50
+	<fstream>
+	<iostream>
+	<sstream>
+	<algorithm>
+	<utility>
+	<GL/glut.h>
+	"stb_image.h"
+	<direct.h>
+	<Windows.h>
+	<mmsystem.h>
+	<unistd.h>
+
+1760784256 
+
+1760775739 71153cb90817d9ecb3f837a07a661cd2ffc50
 	<GL/glut.h>
 	"stb_image.h"
 	<direct.h>
